@@ -1,23 +1,63 @@
 import { useState, useRef } from 'react';
-import { UploadCloud, Copy, Check, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, Copy, Check, Image as ImageIcon, Loader2 } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
+
+interface ConversionResult {
+  dataUrl: string;
+  originalSize: number;
+  compressedSize: number;
+}
 
 export default function App() {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [result, setResult] = useState<ConversionResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Veuillez importer une image (JPEG, PNG, SVG, etc.)');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setDataUrl(e.target?.result as string);
-      setCopied(false);
-    };
-    reader.readAsDataURL(file);
+
+    setIsCompressing(true);
+    setCopied(false);
+
+    try {
+      const originalSize = file.size;
+
+      const compressed = await imageCompression(file, {
+        maxSizeMB: 0.3,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+        fileType: 'image/webp',
+        initialQuality: 0.75,
+      });
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setResult({
+          dataUrl: e.target?.result as string,
+          originalSize,
+          compressedSize: compressed.size,
+        });
+        setIsCompressing(false);
+      };
+      reader.readAsDataURL(compressed);
+    } catch {
+      // Fallback : conversion sans compression
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setResult({
+          dataUrl: e.target?.result as string,
+          originalSize: file.size,
+          compressedSize: file.size,
+        });
+        setIsCompressing(false);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -38,25 +78,33 @@ export default function App() {
   };
 
   const copyToClipboard = () => {
-    if (dataUrl) {
-      navigator.clipboard.writeText(dataUrl);
+    if (result) {
+      navigator.clipboard.writeText(result.dataUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   const reset = () => {
-    setDataUrl(null);
+    setResult(null);
     setCopied(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setIsCompressing(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const formatSize = (bytes: number) =>
+    bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KB`
+      : `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+
+  const ratio = result
+    ? Math.round((1 - result.compressedSize / result.originalSize) * 100)
+    : 0;
 
   return (
     <div className="min-h-screen bg-[#F4F4F5] flex flex-col items-center justify-center p-6 md:p-12 font-sans overflow-x-hidden">
       <div className="w-full max-w-2xl flex flex-col gap-12">
-        
+
         <header className="flex flex-col items-center gap-2">
           <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center mb-4 mt-8 sm:mt-0">
             <ImageIcon className="w-6 h-6 text-white" />
@@ -66,7 +114,12 @@ export default function App() {
         </header>
 
         <main className="flex flex-col gap-8">
-          {!dataUrl ? (
+          {isCompressing ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-16">
+              <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
+              <p className="text-sm text-zinc-500 font-medium">Compression en cours…</p>
+            </div>
+          ) : !result ? (
             <div className="group relative">
               <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3 ml-1">Import Asset</label>
               <div
@@ -88,18 +141,33 @@ export default function App() {
                   <UploadCloud className="w-5 h-5 text-zinc-400" />
                 </div>
                 <div className="text-sm text-zinc-600 font-medium">Drop JPEG, PNG or SVG</div>
-                <div className="text-xs text-zinc-400">Maximum file size 5MB</div>
+                <div className="text-xs text-zinc-400">Maximum file size 5MB · Auto-compressed to WebP</div>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-8">
-              
+
               {/* Image Preview */}
               <div className="group relative">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3 ml-1">Asset Preview</label>
                 <div className="relative aspect-video bg-white rounded-3xl overflow-hidden flex items-center justify-center border border-zinc-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={dataUrl} alt="Aperçu de l'import" className="max-w-full max-h-full object-contain p-4" />
+                  <img src={result.dataUrl} alt="Aperçu de l'import" className="max-w-full max-h-full object-contain p-4" />
+                </div>
+              </div>
+
+              {/* Compression stats */}
+              <div className="flex gap-3">
+                <div className="flex-1 bg-white border border-zinc-200 rounded-2xl px-4 py-3 flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Original</span>
+                  <span className="text-sm font-semibold text-zinc-700">{formatSize(result.originalSize)}</span>
+                </div>
+                <div className="flex-1 bg-white border border-zinc-200 rounded-2xl px-4 py-3 flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Compressé</span>
+                  <span className="text-sm font-semibold text-zinc-700">{formatSize(result.compressedSize)}</span>
+                </div>
+                <div className="flex-1 bg-black rounded-2xl px-4 py-3 flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Réduction</span>
+                  <span className="text-sm font-semibold text-white">−{ratio}%</span>
                 </div>
               </div>
 
@@ -111,12 +179,12 @@ export default function App() {
                     <input
                       type="text"
                       readOnly
-                      value={dataUrl}
+                      value={result.dataUrl}
                       className="w-full px-5 py-4 bg-white border border-zinc-200 rounded-2xl text-zinc-900 text-sm font-mono focus:outline-none"
                       onClick={(e) => (e.target as HTMLInputElement).select()}
                     />
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
-                       <span className="text-[10px] font-medium bg-zinc-100 text-zinc-500 px-2 py-1 rounded">Base64</span>
+                      <span className="text-[10px] font-medium bg-zinc-100 text-zinc-500 px-2 py-1 rounded">Base64 · WebP</span>
                     </div>
                   </div>
                   <div className="flex gap-2">
