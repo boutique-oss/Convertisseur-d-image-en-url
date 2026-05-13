@@ -1,0 +1,6 @@
+{
+  "name": "Image to Base64 Encoder",
+  "description": "Convert images into Base64 Data URLs for easy embedding.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
