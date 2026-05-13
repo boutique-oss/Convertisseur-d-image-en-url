@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "agent": "tsx server.ts",
+    "start": "concurrently \"npm run dev\" \"npm run agent\"",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -13,14 +15,20 @@
   "dependencies": {
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/cors": "^2.8.19",
+    "@types/multer": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.4",
     "browser-image-compression": "^2.0.2",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "multer": "^2.1.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "sharp": "^0.34.5",
     "vite": "^6.2.3"
   },
   "devDependencies": {
