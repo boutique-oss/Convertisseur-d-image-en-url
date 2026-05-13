@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   UploadCloud, Copy, Check, Image as ImageIcon,
   Loader2, Link, Code2, Trash2,
