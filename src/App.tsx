@@ -36,21 +36,51 @@ function removeWhiteBackground(canvas: HTMLCanvasElement, threshold: number): HT
 
   for (let i = 0; i < d.length; i += 4) {
     const r = d[i], g = d[i + 1], b = d[i + 2];
-    // luminosité perceptive
     const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    // saturation : écart entre canal max et min
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    const sat = max - min;
-
-    // pixel blanc/gris clair peu saturé → transparent
+    const sat = Math.max(r, g, b) - Math.min(r, g, b);
     if (lum >= threshold && sat < 40) {
-      // fondu progressif sur les 20 derniers niveaux
       const fade = Math.round(255 * (1 - (lum - threshold) / (255 - threshold)));
       d[i + 3] = Math.max(0, Math.min(fade, d[i + 3]));
     }
   }
 
   ctx.putImageData(imageData, 0, 0);
+  return out;
+}
+
+function trimAndRecenter(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext('2d')!;
+  const { width, height } = canvas;
+  const d = ctx.getImageData(0, 0, width, height).data;
+
+  let minX = width, maxX = 0, minY = height, maxY = 0;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = d[(y * width + x) * 4 + 3];
+      if (alpha > 10) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // rien de visible → retourner tel quel
+  if (minX > maxX || minY > maxY) return canvas;
+
+  const contentW = maxX - minX + 1;
+  const contentH = maxY - minY + 1;
+  const size = Math.max(contentW, contentH);
+
+  const out = document.createElement('canvas');
+  out.width = size;
+  out.height = size;
+  const octx = out.getContext('2d')!;
+  const dx = Math.round((size - contentW) / 2);
+  const dy = Math.round((size - contentH) / 2);
+  octx.drawImage(canvas, minX, minY, contentW, contentH, dx, dy, contentW, contentH);
   return out;
 }
 
@@ -65,8 +95,10 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const applyAndExport = (canvas: HTMLCanvasElement, doRemove: boolean, thresh: number) => {
-    const final = doRemove ? removeWhiteBackground(canvas, thresh) : canvas;
-    return final.toDataURL('image/png');
+    if (!doRemove) return canvas.toDataURL('image/png');
+    const stripped = removeWhiteBackground(canvas, thresh);
+    const recentered = trimAndRecenter(stripped);
+    return recentered.toDataURL('image/png');
   };
 
   const handleFile = async (file: File) => {
